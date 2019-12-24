@@ -40,7 +40,7 @@ def CT(l, d, options, nmax):
     axs[0].hist(visited.values())
     axs[0].set_title('Distribution of the number of realizations of T(s,s\')')
     axs[1].hist(avgs.values())
-    axs[1].set_title('Distribution of the averages of T(s,s\')')
+    axs[1].set_title('Histogram of the means E[T(s,s\')]')
     plt.show()
 
     mx = max(avgs.values())
@@ -54,7 +54,32 @@ def CT(l, d, options, nmax):
             plt.hist(times[k], bins=50)
             plt.title('Distribution of CT')
             plt.show()
+    return env
 
+# Cover-time computed by chapman-kolmogorov formula on markov chain induced by a random uniform policy on the mdp
+def algebric_CT(mdp,states):
+    P = torch.mean(mdp.P,dim=0) #transition matrix of a random uniform policy
+    Ns = mdp.Ns
+    T = torch.zeros(Ns,Ns)
+    for s_prime in range(Ns):
+        l=list(range(Ns))
+        l.remove(s_prime)
+        Q = P[l][:,l]
+        vec = torch.mm(torch.inverse(torch.eye(Ns-1) - Q),torch.ones(Ns-1,1))
+        vec = vec.reshape(-1).tolist()
+        vec.insert(s_prime,0)
+        T[s_prime] = torch.tensor(vec)
+    print('Info on cover time')
+    max = torch.max(T)
+    max_pair = torch.where(T==max)
+    max_pair = (max_pair[0].item(),max_pair[1].item())
+    max_pair = (states[max_pair[0]],states[max_pair[1]])
+    print('Attained for state pair:', max_pair)
+    print('Value: ',max.item() )
+    plt.hist(T[T>0].flatten(),bins=35)
+    plt.title('Histogram of the means E[T(s,s\')]')
+    plt.show()
+    return T
 
 def D_uniform_options(l, d, k, eps, nmax):
     agent = RWOptionAgent(options, l, d)
@@ -62,11 +87,27 @@ def D_uniform_options(l, d, k, eps, nmax):
     times = get_first_times(env, agent, nmax)
 
 
+
+def random_transitions(Na,Ns,threshold):
+    P = torch.zeros(Na,Ns,Ns)
+    for a in range(Na):
+        Pa = torch.rand(Ns,Ns)
+        Pa[Pa < threshold] = 0
+        Pa = Pa/torch.sum(Pa,axis=1)[:,None]
+        P[a] = Pa
+    return P
+
+Na = 4
+Ns = 10
+threshold = 0.6
+#P = random_tranisitions(Na,Ns,threshold)
+#R = torch.zeros(Ns,Na)
+
 d = 2
 l = 5
 options = [ActionOption(i, l, d) for i in range(2*d)]
-CT(l, d, options, 10**4)
-
-
+grid = CT(l, d, options, 10**4)
+mdp, states = Grid_to_MDP(grid)
+algebric_CT(mdp,states)
 
 
